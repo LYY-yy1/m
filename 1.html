@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <!-- 响应式适配 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>天气预报查询</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+        body {
+            background: linear-gradient(135deg, #74b9ff, #0984e3);
+            min-height: 100vh;
+            padding: 30px 15px;
+        }
+        .weather-box {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255,255,255,0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+        }
+        h1 {
+            text-align: center;
+            color: #2d3436;
+            margin-bottom: 25px;
+            font-size: 26px;
+        }
+        .search-area {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        #cityInput {
+            flex: 1;
+            min-width: 200px;
+            padding: 12px 16px;
+            border: 1px solid #dfe6e9;
+            border-radius: 8px;
+            font-size: 16px;
+            outline: none;
+            transition: 0.3s;
+        }
+        #cityInput:focus {
+            border-color: #0984e3;
+            box-shadow: 0 0 0 3px rgba(9,132,227,0.2);
+        }
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 15px;
+            transition: 0.2s;
+        }
+        .search-btn {
+            background: #0984e3;
+            color: #fff;
+        }
+        .location-btn {
+            background: #00b894;
+            color: #fff;
+        }
+        button:hover {
+            opacity: 0.85;
+        }
+        .now-weather {
+            text-align: center;
+            padding: 20px 0;
+            border-bottom: 1px solid #eee;
+            margin-bottom: 25px;
+        }
+        .now-temp {
+            font-size: 60px;
+            font-weight: bold;
+            color: #2d3436;
+            margin: 10px 0;
+        }
+        .now-desc {
+            font-size: 18px;
+            color: #636e72;
+        }
+        .forecast-wrap {
+            display: flex;
+            gap: 15px;
+            overflow-x: auto;
+            padding-bottom: 10px;
+        }
+        .forecast-item {
+            min-width: 140px;
+            padding: 18px 10px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        .forecast-date {
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #2d3436;
+        }
+        .forecast-temp {
+            margin-top: 10px;
+            color: #636e72;
+        }
+        .tip-text {
+            text-align: center;
+            color: #b2bec3;
+            padding: 40px 0;
+            font-size: 16px;
+        }
+        .error-tip {
+            color: #d63031;
+            text-align: center;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <main class="weather-box">
+        <h1>城市天气预报</h1>
+        <section class="search-area">
+            <input type="text" id="cityInput" placeholder="请输入城市名称（如：广州、北京）">
+            <button class="search-btn" id="searchBtn">查询天气</button>
+            <button class="location-btn" id="locationBtn">定位当前城市</button>
+        </section>
+        <div class="error-tip" id="errorBox"></div>
+        <section class="now-weather" id="nowBox">
+            <div class="tip-text">输入城市查询天气</div>
+        </section>
+        <section id="forecastBox">
+        </section>
+    </main>
+    <script>
+        const KEY = "你的和风天气KEY";
+        const cityInput = document.getElementById("cityInput");
+        const searchBtn = document.getElementById("searchBtn");
+        const locationBtn = document.getElementById("locationBtn");
+        const nowBox = document.getElementById("nowBox");
+        const forecastBox = document.getElementById("forecastBox");
+        const errorBox = document.getElementById("errorBox");
+        window.onload = () => {
+            const lastCity = localStorage.getItem("lastCity");
+            if(lastCity) {
+                cityInput.value = lastCity;
+                getWeather(lastCity);
+            }
+        }
+        function clearTip() {
+            errorBox.textContent = "";
+        }
+        function handleSearch() {
+            clearTip();
+            const city = cityInput.value.trim();
+            if(!city) {
+                errorBox.textContent = "请输入城市名称！";
+                return;
+            }
+            localStorage.setItem("lastCity", city);
+            getWeather(city);
+        }
+        searchBtn.addEventListener("click", handleSearch);
+        cityInput.addEventListener("keydown", (e) => {
+            if(e.key === "Enter") handleSearch();
+        })
+        locationBtn.addEventListener("click", () => {
+            clearTip();
+            if(!navigator.geolocation) {
+                errorBox.textContent = "你的浏览器不支持定位";
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(async pos => {
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+                const res = await fetch(`https://geoapi.qweather.com/v2/city/lookup?location=${lon},${lat}&key=${KEY}`);
+                const data = await res.json();
+                if(data.code === "200") {
+                    const cityName = data.location[0].name;
+                    cityInput.value = cityName;
+                    localStorage.setItem("lastCity", cityName);
+                    getWeather(cityName);
+                } else {
+                    errorBox.textContent = "定位解析城市失败";
+                }
+            }, err => {
+                errorBox.textContent = "定位授权失败，请手动输入城市";
+            })
+        })
+        async function getWeather(cityName) {
+            clearTip();
+            try {
+                const cityRes = await fetch(`https://geoapi.qweather.com/v2/city/lookup?location=${cityName}&key=${KEY}`);
+                const cityData = await cityRes.json();
+                if(cityData.code !== "200") throw new Error("城市不存在");
+                const cityId = cityData.location[0].id;
+                const nowRes = await fetch(`https://devapi.qweather.com/v7/weather/now?location=${cityId}&key=${KEY}`);
+                const nowData = await nowRes.json();
+                const forecastRes = await fetch(`https://devapi.qweather.com/v7/weather/7d?location=${cityId}&key=${KEY}`);
+                const forecastData = await forecastRes.json();
+                renderNow(nowData, cityName);
+                renderForecast(forecastData.daily.slice(0,5));
+
+            } catch(err) {
+                errorBox.textContent = err.message;
+                nowBox.innerHTML = `<div class="tip-text">暂无天气数据</div>`;
+                forecastBox.innerHTML = "";
+            }
+        }
+        function renderNow(data, city) {
+            const { temp, feelsLike, text } = data.now;
+            nowBox.innerHTML = `
+                <h2>${city}</h2>
+                <div class="now-temp">${temp}℃</div>
+                <div class="now-desc">天气：${text} | 体感温度 ${feelsLike}℃</div>
+            `
+        }
+        function renderForecast(list) {
+            let html = `<div class="forecast-wrap">`;
+            list.forEach(item => {
+                const { fxDate, tempMax, tempMin, textDay } = item;
+                html += `
+                    <div class="forecast-item">
+                        <div class="forecast-date">${fxDate}</div>
+                        <div>${textDay}</div>
+                        <div class="forecast-temp">${tempMin}℃ ~ ${tempMax}℃</div>
+                    </div>
+                `
+            })
+            html += `</div>`;
+            forecastBox.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
